@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Transactional
 public class ComplaintService {
 
     private final ComplaintRepository complaintRepository;
