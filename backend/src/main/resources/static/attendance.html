@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance – Hostel Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="logo-icon">🏠</span>
+            <div class="logo-text"><h2>Hostel Mgmt</h2><span>Warden Portal</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section-title">Main Menu</div>
+            <a href="/dashboard.html" class="nav-link" data-page="dashboard"><span class="nav-icon">📊</span> Dashboard</a>
+            <a href="/attendance.html" class="nav-link" data-page="attendance"><span class="nav-icon">✅</span> Attendance</a>
+            <a href="/students.html" class="nav-link" data-page="students"><span class="nav-icon">👨‍🎓</span> Students</a>
+            <a href="/fees.html" class="nav-link" data-page="fees"><span class="nav-icon">💰</span> Fee Tracking</a>
+            <a href="/complaints.html" class="nav-link" data-page="complaints"><span class="nav-icon">📋</span> Complaints</a>
+            <div class="nav-section-title">Settings</div>
+            <a href="/rooms.html" class="nav-link" data-page="rooms"><span class="nav-icon">🚪</span> Manage Rooms</a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="sidebarUserInitial">W</div>
+                <div class="user-details">
+                    <div class="user-name" id="sidebarUserName">Warden</div>
+                    <div class="user-role" id="sidebarUserRole">WARDEN</div>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="logout()">🚪 Logout</button>
+        </div>
+    </aside>
+
+    <div class="main-content">
+        <div class="topbar">
+            <h1>✅ Daily Attendance</h1>
+            <div class="topbar-actions">
+                <div class="date-selector">
+                    <label>Date:</label>
+                    <input type="date" id="attendanceDate">
+                </div>
+            </div>
+        </div>
+        <div class="page-content">
+            <!-- Summary bar -->
+            <div class="stats-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:20px">
+                <div class="stat-card">
+                    <div class="stat-icon blue">🏠</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="summTotalRooms">–</div>
+                        <div class="stat-label">Rooms with Students</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">✅</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="summTotalPresent">–</div>
+                        <div class="stat-label">Present Today</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon red">❌</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="summTotalAbsent">–</div>
+                        <div class="stat-label">Absent Today</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="page-tabs" id="pageTabs"></div>
+
+            <!-- Room widgets -->
+            <div class="rooms-grid" id="roomsGrid">
+                <div class="loading"><div class="spinner"></div><span>Loading rooms...</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+Auth.requireAuth();
+initSidebar('attendance');
+
+const ROOMS_PER_PAGE = 6;
+let allRoomData = [];
+let currentPage = 0;
+let selectedDate = DateUtil.today();
+
+document.getElementById('attendanceDate').value = selectedDate;
+document.getElementById('attendanceDate').addEventListener('change', (e) => {
+    selectedDate = e.target.value;
+    loadAttendance();
+});
+
+function escHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadAttendance() {
+    try {
+        const summary = await API.get(`/attendance/summary?date=${selectedDate}`);
+        allRoomData = summary;
+
+        // Update summary stats
+        const totalStudents = summary.reduce((s, r) => s + r.totalStudents, 0);
+        const totalPresent = summary.reduce((s, r) => s + r.presentCount, 0);
+        document.getElementById('summTotalRooms').textContent = summary.length;
+        document.getElementById('summTotalPresent').textContent = totalPresent;
+        document.getElementById('summTotalAbsent').textContent = totalStudents - totalPresent;
+
+        // Render pagination
+        renderPagination();
+        renderPage(0);
+    } catch (err) {
+        document.getElementById('roomsGrid').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><p>${err.message}</p></div>`;
+    }
+}
+
+function renderPagination() {
+    const tabs = document.getElementById('pageTabs');
+    const totalPages = Math.ceil(allRoomData.length / ROOMS_PER_PAGE);
+    if (totalPages <= 1) { tabs.innerHTML = ''; return; }
+    tabs.innerHTML = Array.from({ length: totalPages }, (_, i) =>
+        `<button class="page-tab ${i === currentPage ? 'active' : ''}" onclick="renderPage(${i})">Page ${i + 1}</button>`
+    ).join('');
+}
+
+function renderPage(page) {
+    currentPage = page;
+    // Update active tab
+    document.querySelectorAll('.page-tab').forEach((t, i) => t.classList.toggle('active', i === page));
+
+    const start = page * ROOMS_PER_PAGE;
+    const pageRooms = allRoomData.slice(start, start + ROOMS_PER_PAGE);
+
+    if (pageRooms.length === 0) {
+        document.getElementById('roomsGrid').innerHTML = `
+            <div class="empty-state" style="grid-column:1/-1">
+                <div class="empty-icon">🏠</div>
+                <p>No rooms with students assigned yet.<br>Add students to rooms first.</p>
+                <a href="/students.html" class="btn btn-primary" style="margin-top:16px">Manage Students</a>
+            </div>`;
+        return;
+    }
+
+    // Load detailed attendance for each room
+    Promise.all(pageRooms.map(r => API.get(`/attendance/room/${r.roomId}?date=${selectedDate}`)))
+        .then(results => {
+            document.getElementById('roomsGrid').innerHTML = results.map(res => renderRoomCard(res[0])).join('');
+        })
+        .catch(err => Toast.error(err.message));
+}
+
+function renderRoomCard(room) {
+    if (!room) return '';
+    const students = room.students || [];
+    const presentCount = room.presentCount || 0;
+
+    return `
+    <div class="room-card" id="room-card-${room.roomId}">
+        <div class="room-card-header">
+            <div>
+                <div class="room-number">🚪 Room ${escHtml(room.roomNumber)}</div>
+                <div class="room-meta">Floor ${room.floor || 1} · ${students.length} Students</div>
+            </div>
+            <div class="room-presence-badge">
+                <div class="present-count" id="present-count-${room.roomId}">${presentCount}</div>
+                <div class="presence-label">Present / ${students.length}</div>
+            </div>
+        </div>
+        <div class="room-card-body">
+            ${students.length === 0 ? '<div class="room-card-empty">No students in this room</div>' :
+                students.map(s => `
+                <div class="student-attendance-row">
+                    <div class="student-info">
+                        <div class="student-name">${escHtml(s.studentName)}</div>
+                        <div class="student-reg">${escHtml(s.registrationNo)}</div>
+                    </div>
+                    <div class="attendance-toggle">
+                        <button class="att-btn att-btn-present ${s.status === 'PRESENT' ? 'active' : ''}"
+                            onclick="markAttendance(${room.roomId}, ${s.studentId}, 'PRESENT', this)">✓ Present</button>
+                        <button class="att-btn att-btn-absent ${s.status === 'ABSENT' ? 'active' : ''}"
+                            onclick="markAttendance(${room.roomId}, ${s.studentId}, 'ABSENT', this)">✗ Absent</button>
+                    </div>
+                </div>`).join('')
+            }
+        </div>
+        ${students.length > 0 ? `
+        <div class="room-card-footer">
+            <button class="btn btn-sm btn-success" onclick="markAllPresent(${room.roomId})">✅ All Present</button>
+            <button class="btn btn-sm btn-danger" onclick="markAllAbsent(${room.roomId})">❌ All Absent</button>
+        </div>` : ''}
+    </div>`;
+}
+
+async function markAttendance(roomId, studentId, status, btn) {
+    try {
+        await API.post('/attendance', {
+            date: selectedDate,
+            records: [{ studentId, status }]
+        });
+        // Update button states
+        const row = btn.closest('.student-attendance-row');
+        row.querySelector('.att-btn-present').classList.toggle('active', status === 'PRESENT');
+        row.querySelector('.att-btn-absent').classList.toggle('active', status === 'ABSENT');
+        // Update present count in header
+        updateRoomPresentCount(roomId);
+        Toast.success(`Marked ${status.toLowerCase()}`);
+    } catch (err) {
+        Toast.error(err.message);
+    }
+}
+
+function updateRoomPresentCount(roomId) {
+    const card = document.getElementById(`room-card-${roomId}`);
+    if (!card) return;
+    const presentBtns = card.querySelectorAll('.att-btn-present.active');
+    document.getElementById(`present-count-${roomId}`).textContent = presentBtns.length;
+    // Update summary
+    const totalPresent = Array.from(document.querySelectorAll('.att-btn-present.active')).length;
+    const totalStudents = Array.from(document.querySelectorAll('.att-btn-present, .att-btn-absent'))
+        .filter(b => b.classList.contains('att-btn-present')).length;
+    document.getElementById('summTotalPresent').textContent = totalPresent;
+    document.getElementById('summTotalAbsent').textContent = totalStudents - totalPresent;
+}
+
+async function markAllPresent(roomId) {
+    const card = document.getElementById(`room-card-${roomId}`);
+    if (!card) return;
+    const rows = card.querySelectorAll('.student-attendance-row');
+    const records = Array.from(rows).map(row => {
+        const presentBtn = row.querySelector('.att-btn-present');
+        const studentId = parseInt(presentBtn.getAttribute('onclick').match(/\d+/)[0]);
+        return { studentId, status: 'PRESENT' };
+    });
+    if (records.length === 0) return;
+    try {
+        await API.post('/attendance', { date: selectedDate, records });
+        rows.forEach(row => {
+            row.querySelector('.att-btn-present').classList.add('active');
+            row.querySelector('.att-btn-absent').classList.remove('active');
+        });
+        updateRoomPresentCount(roomId);
+        Toast.success('All students marked present');
+    } catch (err) { Toast.error(err.message); }
+}
+
+async function markAllAbsent(roomId) {
+    const card = document.getElementById(`room-card-${roomId}`);
+    if (!card) return;
+    const rows = card.querySelectorAll('.student-attendance-row');
+    const records = Array.from(rows).map(row => {
+        const presentBtn = row.querySelector('.att-btn-present');
+        const studentId = parseInt(presentBtn.getAttribute('onclick').match(/\d+/)[0]);
+        return { studentId, status: 'ABSENT' };
+    });
+    if (records.length === 0) return;
+    try {
+        await API.post('/attendance', { date: selectedDate, records });
+        rows.forEach(row => {
+            row.querySelector('.att-btn-present').classList.remove('active');
+            row.querySelector('.att-btn-absent').classList.add('active');
+        });
+        updateRoomPresentCount(roomId);
+        Toast.success('All students marked absent');
+    } catch (err) { Toast.error(err.message); }
+}
+
+loadAttendance();
+</script>
+</body>
+</html>
