@@ -6,6 +6,7 @@ A comprehensive hostel management system for wardens to manage students, attenda
 
 - **🔐 Warden Authentication** – Secure JWT-based login
 - **👨‍🎓 Student Management** – Add/Edit/Delete students with full personal details (name, father's name, registration no., phone, email, address)
+- **📥 Bulk Student Import** – Import students from CSV or Excel files (XLS/XLSX), supporting batch operations with detailed error reporting
 - **🔍 Search by Registration No.** – Quickly find students by their Reg. No.
 - **🚪 Room Management** – Scalable room system (add as many rooms as needed), 3 students per room by default
 - **✅ Daily Attendance** – Room-based widget view (4–6 rooms per page), mark Present/Absent per student, shows live present count
@@ -123,6 +124,7 @@ Navigate to: **http://localhost:8080**
 | POST | `/api/students` | Add new student |
 | PUT | `/api/students/{id}` | Update student |
 | DELETE | `/api/students/{id}` | Remove student |
+| POST | `/api/students/import` | Bulk import students from CSV/Excel file |
 | GET | `/api/rooms` | List all rooms |
 | POST | `/api/rooms` | Add new room |
 | GET | `/api/attendance/summary?date=YYYY-MM-DD` | All rooms attendance summary |
@@ -141,10 +143,21 @@ Navigate to: **http://localhost:8080**
 | **Login** | Warden login with credentials |
 | **Dashboard** | Stats overview, recent complaints, today's attendance summary |
 | **Attendance** | Room widgets (4–6 per page), mark present/absent per student, live count |
-| **Students** | Full student directory, search, CRUD, room assignment |
+| **Students** | Full student directory, search, CRUD, bulk import from CSV/Excel, room assignment |
 | **Fee Tracking** | Fee status management (Paid/Unpaid/Partial), filter by status |
 | **Complaints** | Register complaints, update status, mark as resolved |
 | **Manage Rooms** | Add/edit/delete rooms, view occupancy, scalable system |
+
+## 📥 Bulk Student Import
+
+The system supports importing multiple students from CSV or Excel files. See [BULK_IMPORT_GUIDE.md](./BULK_IMPORT_GUIDE.md) for detailed instructions on file format, validation rules, and usage.
+
+**Key Features:**
+- Support for CSV, XLS, and XLSX file formats
+- File preview before import
+- Batch processing with detailed error reporting
+- Room capacity validation during import
+- Duplicate registration number prevention
 
 ## 📝 Notes
 
