@@ -39,6 +39,7 @@
         <div class="topbar">
             <h1>👨‍🎓 Students</h1>
             <div class="topbar-actions">
+                <button class="btn btn-primary" onclick="openImportModal()" style="margin-right:8px">📥 Import Students</button>
                 <button class="btn btn-primary" onclick="openAddModal()">+ Add Student</button>
             </div>
         </div>
@@ -129,6 +130,55 @@
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="Modal.close('viewModal')">Close</button>
             <button class="btn btn-primary" id="viewEditBtn">Edit</button>
+        </div>
+    </div>
+</div>
+
+<!-- Import Students Modal -->
+<div class="modal-overlay" id="importModal">
+    <div class="modal" style="max-width:600px">
+        <div class="modal-header">
+            <h3>📥 Import Students</h3>
+            <button class="modal-close" onclick="Modal.close('importModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="alert alert-info" style="margin-bottom:16px">
+                <strong>File Format:</strong> Upload a CSV or Excel file (XLS/XLSX) with the following columns:<br>
+                registrationNo, name, fatherName, phone, email, address, roomId
+            </div>
+            <div class="form-group">
+                <label>Select File *</label>
+                <input type="file" id="importFile" class="form-control" accept=".csv,.xls,.xlsx" placeholder="Choose CSV or Excel file">
+                <small style="color:var(--text-secondary)">Supported formats: CSV, XLS, XLSX</small>
+            </div>
+            <div id="importPreview" style="display:none;margin-top:16px;border:1px solid var(--border-color);border-radius:4px;padding:12px;background-color:var(--bg-secondary)">
+                <div style="font-weight:700;margin-bottom:8px">Preview (first 5 rows):</div>
+                <div id="previewTable" style="overflow-x:auto"></div>
+                <div style="margin-top:8px;font-size:13px;color:var(--text-secondary)">
+                    Total records: <span id="previewCount">0</span>
+                </div>
+            </div>
+            <div class="alert alert-danger" id="importError" style="display:none;margin-top:12px"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('importModal')">Cancel</button>
+            <button class="btn btn-primary" id="importBtn" onclick="performImport()" disabled>Import Students</button>
+        </div>
+    </div>
+</div>
+
+<!-- Import Results Modal -->
+<div class="modal-overlay" id="importResultModal">
+    <div class="modal" style="max-width:700px;max-height:80vh;overflow-y:auto">
+        <div class="modal-header">
+            <h3>📊 Import Results</h3>
+            <button class="modal-close" onclick="Modal.close('importResultModal')">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="importResultContent"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('importResultModal'); Modal.close('importModal'); loadData();">Done</button>
         </div>
     </div>
 </div>
@@ -313,6 +363,243 @@ async function deleteStudent(id, name) {
         Toast.success('Student removed');
         await loadData();
     } catch (err) { Toast.error(err.message); }
+}
+
+// Import students functionality
+let importedFileData = null;
+
+function openImportModal() {
+    Modal.open('importModal');
+    document.getElementById('importFile').value = '';
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importError').style.display = 'none';
+    document.getElementById('importBtn').disabled = true;
+    importedFileData = null;
+}
+
+document.getElementById('importFile').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    const errEl = document.getElementById('importError');
+    const previewEl = document.getElementById('importPreview');
+    const importBtn = document.getElementById('importBtn');
+    
+    errEl.style.display = 'none';
+    previewEl.style.display = 'none';
+    importBtn.disabled = true;
+    importedFileData = null;
+    
+    if (!file) return;
+    
+    // Validate file type
+    const filename = file.name.toLowerCase();
+    if (!filename.endsWith('.csv') && !filename.endsWith('.xls') && !filename.endsWith('.xlsx')) {
+        errEl.textContent = 'Invalid file type. Please upload a CSV or Excel file (XLS/XLSX)';
+        errEl.style.display = 'flex';
+        return;
+    }
+    
+    // Read file for preview
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            const content = event.target.result;
+            let lines = content.split('\n');
+            
+            // Parse CSV
+            let rows = [];
+            let headers = [];
+            
+            if (filename.endsWith('.csv')) {
+                const parser = new CSVParser(content);
+                rows = parser.getRows();
+                headers = parser.getHeaders();
+            } else {
+                // For Excel, we'll show a message since we can't parse it in browser
+                errEl.textContent = 'Excel file will be processed on the server. Click Import to continue.';
+                errEl.style.display = 'flex';
+                importedFileData = { file: file, isExcel: true };
+                importBtn.disabled = false;
+                return;
+            }
+            
+            if (rows.length === 0) {
+                errEl.textContent = 'File is empty or invalid format';
+                errEl.style.display = 'flex';
+                return;
+            }
+            
+            // Show preview
+            let previewHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px">';
+            previewHTML += '<thead><tr>';
+            
+            headers.forEach(h => {
+                previewHTML += `<th style="padding:6px;border:1px solid var(--border-color);text-align:left;background-color:var(--bg-tertiary);font-weight:700">${escHtml(h)}</th>`;
+            });
+            previewHTML += '</tr></thead><tbody>';
+            
+            // Show first 5 rows
+            for (let i = 0; i < Math.min(5, rows.length); i++) {
+                previewHTML += '<tr>';
+                headers.forEach(h => {
+                    const value = rows[i][h] || '';
+                    previewHTML += `<td style="padding:6px;border:1px solid var(--border-color)">${escHtml(value)}</td>`;
+                });
+                previewHTML += '</tr>';
+            }
+            previewHTML += '</tbody></table>';
+            
+            document.getElementById('previewTable').innerHTML = previewHTML;
+            document.getElementById('previewCount').textContent = rows.length;
+            previewEl.style.display = 'block';
+            
+            importedFileData = { file: file, rows: rows, headers: headers };
+            importBtn.disabled = false;
+            
+        } catch (err) {
+            errEl.textContent = 'Error reading file: ' + err.message;
+            errEl.style.display = 'flex';
+        }
+    };
+    
+    reader.readAsText(file);
+});
+
+// Simple CSV Parser
+class CSVParser {
+    constructor(content) {
+        this.lines = content.trim().split('\n');
+        this.headers = this.parseHeaders();
+    }
+    
+    parseHeaders() {
+        if (this.lines.length === 0) return [];
+        return this.parseCSVLine(this.lines[0]);
+    }
+    
+    getHeaders() {
+        return this.headers;
+    }
+    
+    getRows() {
+        const rows = [];
+        for (let i = 1; i < this.lines.length; i++) {
+            if (this.lines[i].trim() === '') continue;
+            const values = this.parseCSVLine(this.lines[i]);
+            const row = {};
+            this.headers.forEach((h, idx) => {
+                row[h] = values[idx] || '';
+            });
+            rows.push(row);
+        }
+        return rows;
+    }
+    
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+}
+
+async function performImport() {
+    if (!importedFileData) {
+        Toast.error('No file selected');
+        return;
+    }
+    
+    const importBtn = document.getElementById('importBtn');
+    importBtn.disabled = true;
+    
+    try {
+        const formData = new FormData();
+        formData.append('file', importedFileData.file);
+        
+        const response = await fetch('/api/students/import', {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + Auth.getToken()
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Import failed');
+        }
+        
+        const result = await response.json();
+        showImportResults(result);
+        
+    } catch (err) {
+        Toast.error(err.message);
+    } finally {
+        importBtn.disabled = false;
+    }
+}
+
+function showImportResults(result) {
+    const content = document.getElementById('importResultContent');
+    
+    let html = '';
+    
+    // Summary
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">';
+    html += `<div style="padding:12px;background-color:var(--success-light);border-radius:4px;border-left:4px solid var(--success)">
+        <div style="font-size:11px;text-transform:uppercase;color:var(--success);font-weight:700">Success</div>
+        <div style="font-size:24px;font-weight:700">${result.successCount}</div>
+    </div>`;
+    
+    const totalFailed = result.errors ? result.errors.length : 0;
+    const bgColor = totalFailed > 0 ? 'var(--danger-light)' : 'transparent';
+    const color = totalFailed > 0 ? 'var(--danger)' : 'var(--text-secondary)';
+    
+    html += `<div style="padding:12px;background-color:${bgColor};border-radius:4px;${totalFailed > 0 ? 'border-left:4px solid var(--danger)' : ''}">
+        <div style="font-size:11px;text-transform:uppercase;color:${color};font-weight:700">Failed</div>
+        <div style="font-size:24px;font-weight:700">${totalFailed}</div>
+    </div>`;
+    html += '</div>';
+    
+    html += `<p style="color:var(--text-secondary);margin-bottom:16px">${result.message}</p>`;
+    
+    // Errors if any
+    if (result.errors && result.errors.length > 0) {
+        html += '<div style="margin-top:16px"><h4 style="margin-bottom:8px">Errors:</h4>';
+        html += '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border-color);border-radius:4px">';
+        
+        result.errors.forEach(err => {
+            html += `<div style="padding:8px;border-bottom:1px solid var(--border-color);font-size:12px">
+                <strong>Row ${err.rowNumber}</strong> (Reg: ${escHtml(err.registrationNo)})<br>
+                <span style="color:var(--danger)">${escHtml(err.errorMessage)}</span>
+            </div>`;
+        });
+        
+        html += '</div></div>';
+    }
+    
+    content.innerHTML = html;
+    Modal.close('importModal');
+    Modal.open('importResultModal');
 }
 
 loadData();
